@@ -9,6 +9,7 @@ First we must define our extensions, the module and our imports.
 
 module Solutions where
 
+import Data.Maybe (isJust)
 import Data.Word8 (Word8)
 import qualified Data.Vector as V
 import Text.Read (readMaybe)
@@ -120,29 +121,34 @@ a non-zero start will be greater than 255, so we use pattern matching to consume
 
 \begin{code}
 
-word8 :: Parser Word8
+word8 :: Parser (Maybe Word8)
 word8 = P (\input -> case input of
                        [] -> []
-                       (x1:[]) -> [(read [x1], [])]
-                       x@(x1:x2:[]) -> [ (read [x1], [x2])
-                                       , (read x, [])]
-                       x@(x1:x2:x3:[]) -> [ (read [x1], [x2,x3])
-                                          , (read [x1, x2], [x3])
-                                          , (read x, []) ]
-                       (x1:x2:x3:xs) -> [ (read [x1], [x2,x3] ++ xs)
-                                        , (read [x1, x2], [x3] ++ xs)
-                                        , (read [x1, x2, x3], xs) ])
+                       (x1:[]) -> [(myReadWord8 [x1], [])]
+                       x@(x1:x2:[]) -> [ (myReadWord8 [x1], [x2])
+                                       , (myReadWord8 x, [])]
+                       x@(x1:x2:x3:[]) -> [ (myReadWord8 [x1], [x2,x3])
+                                          , (myReadWord8 [x1, x2], [x3])
+                                          , (myReadWord8 x, []) ]
+                       (x1:x2:x3:xs) -> [ (myReadWord8 [x1], [x2,x3] ++ xs)
+                                        , (myReadWord8 [x1, x2], [x3] ++ xs)
+                                        , (myReadWord8 [x1, x2, x3], xs) ])
+
+myReadWord8 :: String -> Maybe Word8
+myReadWord8 str = case ((read str) :: Integer) > 255 of
+                    True -> Nothing
+                    False -> Just $ read str
 
 \end{code}
 
-Lastly, we define our helper type IPv4 and our ipv4 parser that simply outputs
+Lastly, we define our helper type IPv4' and our ipv4 parser that simply outputs
 the result of sequencing four word8 parsers
 
 \begin{code}
 
-type IPv4 = (Word8, Word8, Word8, Word8)
+type IPv4' = (Maybe Word8, Maybe Word8, Maybe Word8, Maybe Word8)
 
-ipv4 :: Parser IPv4
+ipv4 :: Parser IPv4'
 ipv4 = do
   x1 <- word8
   x2 <- word8
@@ -155,14 +161,29 @@ ipv4 = do
 Finally "parse ipv4 input" is all we need to generate our possible addresses.
 
 To only show a list of [IPv4] we filter out any tuple that didn't completely
-consume its input and only take the first element of the tuples.
+consume its input, take the first element of the tuples, filter any Nothing, and
+get rid of Just.
 
 \begin{code}
 
+possibleAddresses' :: String -> [IPv4']
+possibleAddresses' input = fmap fst $ filter (\x -> length (snd x) == 0) $ parse ipv4 input
+
+onlyJust :: IPv4' -> Bool
+onlyJust (x1,x2,x3,x4) = isJust x1 && isJust x2 && isJust x3 && isJust x4
+
+type IPv4 = (Word8, Word8, Word8, Word8)
+
+unmaybeIPv4 :: IPv4' -> IPv4
+unmaybeIPv4 (x1,x2,x3,x4) = ( maybe 0 (\x -> x) x1
+                             , maybe 0 (\x -> x) x2
+                             , maybe 0 (\x -> x) x3
+                             , maybe 0 (\x -> x) x4 )
+
 possibleAddresses :: String -> [IPv4]
-possibleAddresses input = fmap fst $ filter (\x -> length (snd x) == 0) $ parse ipv4 input
-  
-  
+possibleAddresses input = let aux = possibleAddresses' input
+                           in fmap unmaybeIPv4 $ filter onlyJust aux
+
 \end{code}
 
 
